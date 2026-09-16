@@ -57,4 +57,4 @@ curl http://localhost:8080/health
 - AWS CloudWatch — CPU utilisation and 5xx error rate alerts
 - Health endpoint — `GET /health` returns 200 when service is ready
 
-*Project by Yadava Saisree — DevOps Intern Candidate*
+*Project by Yadava Saisree —*
