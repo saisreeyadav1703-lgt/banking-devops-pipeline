@@ -1,0 +1,64 @@
+# Rename this file to .github/workflows/ci-cd.yml to enable GitHub Actions
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, dev, staging ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r app/requirements.txt
+      - name: Run tests
+        run: pytest app/ -v
+        env:
+          APP_ENV: test
+
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t banking-app:${{ github.sha }} .
+      - name: Smoke test
+        run: |
+          docker run -d --name test-app -p 8080:8080 -e APP_ENV=test banking-app:${{ github.sha }}
+          sleep 5
+          curl -f http://localhost:8080/health
+          docker stop test-app
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/staging'
+    steps:
+      - uses: actions/checkout@v4
+      - run: APP_ENV=staging docker compose up -d && sleep 10 && curl -f http://localhost:8080/health
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: chmod +x scripts/deploy.sh && ./scripts/deploy.sh ${{ github.sha }} prod
